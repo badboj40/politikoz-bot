@@ -3,6 +3,8 @@ import requests
 import json as jjson
 import discord
 import time
+from datetime import datetime
+from calendar import timegm
 
 colors = {
     "President": 0x6CAB5C,
@@ -17,27 +19,19 @@ colors = {
 
 
 def format_message(asset):
-    poolpm_link = f"https://pool.pm/6f80b47342de4b8d534d4fe59d8995471154ff5b416a9e46723440a4.Politikoz{asset['name'][-5:]}"
-    date_and_time = time.strftime(
-        "%Y-%m-%d %H:%M:%S UTC", time.localtime(asset["dateSold"] / 1e3)
-    )
-    image_url = f"https://ipfs.io/ipfs/{asset['thumbnail'][7:]}"
-
     embedVar = discord.Embed(
         title=f"{asset['name']}",
-        url=poolpm_link,
-        color=colors[asset["type"]],
-        description=date_and_time,
+        url=asset['pool_link'],
+        color=colors[asset['type']],
+        timestamp=datetime.strptime(asset['soldAt'], "%Y-%m-%dT%H:%M:%S.%fZ"),
     )
+    attribute_string = ""
+    for attribute in asset['attributes']:
+        attribute_string += f"{attribute}\n"
 
-    embedVar.set_author(
-        name="Politikoz",
-        url="https://politikoz.io/",
-        icon_url="https://politikoz.io/static/media/logo.73866ab2.png",
-    )
-
-    embedVar.set_image(url=image_url)
-    embedVar.add_field(name="Price", value=f"{asset['price']} ₳")
+    embedVar.add_field(name=f"Price", value=f"₳ {asset['price']}", inline=True)
+    embedVar.add_field(name=f"Attributes", value=attribute_string, inline=True)
+    embedVar.set_image(url=asset['thumbnail'])
     embedVar.set_footer(text="Brought to you by Gustav#5942")
     return embedVar
 
@@ -47,47 +41,56 @@ def get_assets(settings):
     assets = []
     page = 1
 
-    while True:
-        print(f"Getting page: {page}")
-        if page > settings["max pages"]:
-            break
+    print(f"Getting data from cnft.io", datetime.now())
+    while page <= settings["max pages"]:
         params = {
             "project": "Politikoz",
-            "sort": settings["sort"],
             "page": page,
             "verified": "true",
         }
         if settings["sold"] == "true":
             params["sold"] = "true"
+        elif settings["sold"] == "false":
+            params["sort"]: settings["sort"]
 
         r = requests.post(url, params).json()
 
         try:
-            if len(r["assets"]) == 0:
+            if len(r["results"]) == 0:
                 print("got all assets")
                 break
-            for asset in r["assets"]:
-                new_asset = dict()
-                new_asset["nameId"] = asset["nameId"]
-                new_asset["name"] = asset["metadata"]["name"]
-                new_asset["type"] = asset["metadata"]["name"][:-7]
-                new_asset["price"] = int(asset["price"] / 1e6)
-                new_asset["attributes"] = asset["metadata"]["tags"][1]["attributes"]
-                new_asset["thumbnail"] = asset["metadata"]["image"]
-                new_asset["link"] = f"https://cnft.io/token.php?id={asset['id']}"
+            for result in r["results"]:
+                asset = result['asset']
+                new_asset = {
+                    'name'      : asset['metadata']['name'],
+                    'type'      : asset['metadata']['name'][:-7],
+                    'price'     : int(result['price'] / 1e6),
+                    'attributes': asset['metadata']['attributes'],
+                    'thumbnail' : f"https://ipfs.io/ipfs/{asset['metadata']['image'][7:]}",
+                    'cnft_link'      : f"https://cnft.io/token/{result['_id']}",
+                    'pool_link'      : f"https://pool.pm/6f80b47342de4b8d534d4fe59d8995471154ff5b416a9e46723440a4.{asset['assetId']}",
+                }
+
                 if settings["sold"] == "true":
-                    new_asset["dateSold"] = asset["dateSold"]
+                    new_asset['soldAt'] = result['soldAt']
+                    utc_time = time.strptime(result['soldAt'], "%Y-%m-%dT%H:%M:%S.%fZ")
+                    epoch_time = timegm(utc_time)
+                    new_asset['epoch_time'] = epoch_time 
                 assets.append(new_asset)
             page += 1
         except:
+            print('error with asset', result, "\n\n\n", new_asset)
+            save_to_file([result, new_asset])
             assets = []
-            page = 1
+            page += 1
+
+    print(f"Got all data!", datetime.now())
     return assets
 
 
 def save_to_file(assets):
     with open("politikoz.json", "w+") as fout:
-        jjson.dump(assets, fout)
+        jjson.dump(assets, fout, indent=4)
 
 
 def read_from_file():
@@ -162,19 +165,40 @@ def get_floor(attributes):
             elif attribute.lower() in (attr.lower() for attr in asset["attributes"]):
                 categories[attribute.lower()].append(asset)
 
-    longest_name = 0
-    for cat in categories.keys():
-        if len(cat) > longest_name:
-            longest_name = len(cat)
 
-    floor_prices = "Current floor prices:\n```"
+    category_string = ""
+    price_string = ""
+    name_string = ""
+
     for cat in categories:
-        catt = cat.title() + ":"
+        category_string += f"{cat.title()} \u200b \u200b \u200b \u200b\n"
         if len(categories[cat]) > 0:
             floor = categories[cat][0]
-            floor_prices += (
-                f"{catt:<{longest_name+1}}{floor['price']:>7} ₳\t({floor['name']})\n"
-            )
+            price_string += f"₳ {floor['price']} \u200b \u200b \u200b \u200b\n"
+            name_string += f"[{floor['name']}]({floor['cnft_link']})\n"
         else:
-            floor_prices += f"{catt:<{longest_name+1}} none availabe\n"
-    return floor_prices[:-1] + "\n\nBrought to you by Gustav#5942```"
+            price_string += "none available\n"
+            name_string += "\u200b \u200b\n"
+
+    embedVar = discord.Embed(
+        color=0x000000,
+        timestamp=datetime.utcnow()
+    )
+
+    embedVar.add_field(name="Current Floor", value=category_string, inline=True)
+    embedVar.add_field(name="\u200b", value=price_string, inline=True)
+    embedVar.add_field(name="\u200b", value=name_string, inline=True)
+    embedVar.set_footer(text="Brought to you by Gustav#5942")
+    return embedVar
+
+
+
+if __name__ == "__main__":
+    settings_all_assets = {
+        'sort': '_id:-1',
+        'type': 'sold',
+        'max pages': 1,
+        'sold' : 'true'
+    }
+    assets = get_assets(settings_all_assets)
+    save_to_file(assets)
