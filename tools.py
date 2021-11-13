@@ -50,8 +50,6 @@ def get_assets(settings):
         }
         if settings["sold"] == "true":
             params["sold"] = "true"
-        elif settings["sold"] == "false":
-            params["sort"]: settings["sort"]
 
         r = requests.post(url, params).json()
 
@@ -62,13 +60,14 @@ def get_assets(settings):
             for result in r["results"]:
                 asset = result['asset']
                 new_asset = {
-                    'name'      : asset['metadata']['name'],
-                    'type'      : asset['metadata']['name'][:-7],
-                    'price'     : int(result['price'] / 1e6),
-                    'attributes': asset['metadata']['attributes'],
-                    'thumbnail' : f"https://ipfs.io/ipfs/{asset['metadata']['image'][7:]}",
-                    'cnft_link'      : f"https://cnft.io/token/{result['_id']}",
-                    'pool_link'      : f"https://pool.pm/6f80b47342de4b8d534d4fe59d8995471154ff5b416a9e46723440a4.{asset['assetId']}",
+                    'name'          : asset['metadata']['name'],
+                    'type'          : asset['metadata']['name'][:-7],
+                    'price'         : int(result['price'] / 1e6),
+                    'attributes'    : asset['metadata']['attributes'],
+                    'thumbnail'     : f"https://ipfs.io/ipfs/{asset['metadata']['image'][7:]}",
+                    'cnft_link'     : f"https://cnft.io/token/{result['_id']}",
+                    'pool_link'     : f"https://pool.pm/6f80b47342de4b8d534d4fe59d8995471154ff5b416a9e46723440a4.{asset['assetId']}",
+                    'listing_type'  : result['type'],
                 }
 
                 if settings["sold"] == "true":
@@ -77,10 +76,11 @@ def get_assets(settings):
                     epoch_time = timegm(utc_time)
                     new_asset['epoch_time'] = epoch_time 
                 assets.append(new_asset)
+                #assets.append(result)
             page += 1
         except:
-            print('error with asset', result, "\n\n\n", new_asset)
-            save_to_file([result, new_asset])
+            print('error with asset', new_asset)
+            save_to_file([new_asset])
             assets = []
             page += 1
 
@@ -100,7 +100,12 @@ def read_from_file():
 
 
 def get_floor(attributes):
-    assets = sorted(read_from_file(), key=lambda i: i["price"])
+    all_assets = sorted(read_from_file(), key=lambda i: i["price"])
+    assets = []
+    for asset in all_assets:
+        if asset['listing_type'] != 'auction':
+            assets.append(asset)
+
     types = [
         "President",
         "Senator",
@@ -195,10 +200,8 @@ def get_floor(attributes):
 
 if __name__ == "__main__":
     settings_all_assets = {
-        'sort': '_id:-1',
-        'type': 'sold',
         'max pages': 1,
-        'sold' : 'true'
+        'sold' : 'false'
     }
     assets = get_assets(settings_all_assets)
     save_to_file(assets)
