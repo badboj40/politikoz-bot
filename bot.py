@@ -20,7 +20,7 @@ CHANNEL = int(os.getenv('TEXT_CHANNEL'))
 
 client = discord.Client()
 most_recent = dict()
-debug = False
+debug = True
 #assets = sorted(assets, key = lambda i: -i['dateSold'])
 
 settings_recently_sold = {
@@ -40,9 +40,12 @@ settings_all_assets = {
 async def recently_sold(channel):
     global most_recent
     recent25 = tools.get_assets(settings_recently_sold)
-    if debug or bool(most_recent):
+    if debug:
+        embedVar = tools.format_message(recent25[0])
+        await channel.send(embed=embedVar)
+    elif bool(most_recent):
         for asset in recent25:
-            if debug or asset['epoch_time'] > most_recent['epoch_time']:
+            if asset['epoch_time'] > most_recent['epoch_time']:
                 embedVar = tools.format_message(asset)
                 await channel.send(embed=embedVar)
             else:

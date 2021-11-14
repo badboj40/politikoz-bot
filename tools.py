@@ -31,7 +31,7 @@ def format_message(asset):
 
     embedVar.add_field(name=f"Price", value=f"₳ {asset['price']}", inline=True)
     embedVar.add_field(name=f"Attributes", value=attribute_string, inline=True)
-    embedVar.set_image(url=asset['thumbnail'])
+    embedVar.set_image(url=asset['image'])
     embedVar.set_footer(text="Brought to you by Gustav#5942")
     return embedVar
 
@@ -58,31 +58,32 @@ def get_assets(settings):
                 print("got all assets")
                 break
             for result in r["results"]:
-                asset = result['asset']
-                new_asset = {
-                    'name'          : asset['metadata']['name'],
-                    'type'          : asset['metadata']['name'][:-7],
-                    'price'         : int(result['price'] / 1e6),
-                    'attributes'    : asset['metadata']['attributes'],
-                    'thumbnail'     : f"https://ipfs.io/ipfs/{asset['metadata']['image'][7:]}",
-                    'cnft_link'     : f"https://cnft.io/token/{result['_id']}",
-                    'pool_link'     : f"https://pool.pm/6f80b47342de4b8d534d4fe59d8995471154ff5b416a9e46723440a4.{asset['assetId']}",
-                    'listing_type'  : result['type'],
-                }
+                try:
+                    asset = result['asset']
+                    new_asset = {
+                        'name'          : asset['metadata']['name'],
+                        'type'          : asset['metadata']['name'][:-7],
+                        'price'         : int(result['price'] / 1e6),
+                        'attributes'    : asset['metadata']['attributes'],
+                        'image'         : f"https://cloudflare-ipfs.com/ipfs/{asset['metadata']['image'][7:]}",
+                        'cnft_link'     : f"https://cnft.io/token/{result['_id']}",
+                        'pool_link'     : f"https://pool.pm/{asset['policyId']}.{asset['assetId']}",
+                        'listing_type'  : result['type'],
+                    }
 
-                if settings["sold"] == "true":
-                    new_asset['soldAt'] = result['soldAt']
-                    utc_time = time.strptime(result['soldAt'], "%Y-%m-%dT%H:%M:%S.%fZ")
-                    epoch_time = timegm(utc_time)
-                    new_asset['epoch_time'] = epoch_time 
-                assets.append(new_asset)
-                #assets.append(result)
+                    if settings["sold"] == "true":
+                        new_asset['soldAt'] = result['soldAt']
+                        utc_time = time.strptime(result['soldAt'], "%Y-%m-%dT%H:%M:%S.%fZ")
+                        epoch_time = timegm(utc_time)
+                        new_asset['epoch_time'] = epoch_time 
+                    assets.append(new_asset)
+                except:
+                    assets.append(result)
             page += 1
         except:
-            print('error with asset', new_asset)
-            save_to_file([new_asset])
+            print('error with asset, trying again')
             assets = []
-            page += 1
+            page = 1
 
     print(f"Got all data!", datetime.now())
     return assets
@@ -178,9 +179,9 @@ def get_floor(attributes):
     for cat in categories:
         category_string += f"{cat.title()} \u200b \u200b \u200b \u200b\n"
         if len(categories[cat]) > 0:
-            floor = categories[cat][0]
-            price_string += f"₳ {floor['price']} \u200b \u200b \u200b \u200b\n"
-            name_string += f"[{floor['name']}]({floor['cnft_link']})\n"
+            asset = categories[cat][0]
+            price_string += f"₳ {asset['price']} \u200b \u200b \u200b \u200b\n"
+            name_string += f"[{asset['name']}]({asset['cnft_link']})\n"
         else:
             price_string += "none available\n"
             name_string += "\u200b \u200b\n"
